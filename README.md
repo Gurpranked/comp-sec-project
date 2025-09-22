@@ -2,11 +2,11 @@
 
 ## Todo
 - [x] Review the material for the project
-- [ ] Review the file transfer code 
+- [x] Review the file transfer code 
 
 
 ## Milestone 1: User Registration
-- [ ] Implement User Registration **without** security controls
+- [x] Implement User Registration **without** security controls
 - [ ] Leverage Python APIs and `crypt` library for salted hashes on passwords
 - [ ] Assume CAs for digital certificates
 
