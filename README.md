@@ -34,3 +34,4 @@ User Credentials
 - Full Name
 - Email Address
 - Password
+- Password salt
