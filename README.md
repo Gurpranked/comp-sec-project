@@ -7,7 +7,7 @@
 
 ## Milestone 1: User Registration
 - [x] Implement User Registration **without** security controls
-- [ ] Leverage Python APIs and `crypt` library for salted hashes on passwords
+- [x] Leverage Python APIs and `crypt` library for salted hashes on passwords
 - [ ] Assume CAs for digital certificates
 
 ## Milestone 2: User Login 
