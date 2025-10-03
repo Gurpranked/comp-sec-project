@@ -1,5 +1,4 @@
-gurpreet_singh@student.uml.edu:
-  hash_algo: sha256
-  name: Gurpreet Singh
-  pwd_hash: c472b8d07d7d7fc1e0c6e43ba87f2aa37e7a724839ce5c71
-  salt: 2d7d81ed598f8826
+4a33eacd5fa65f2b2e2871cd131286b53c415b131666d71173bb6e3fe59361b3:
+  name: 4a33eacd5fa65f2b2e2871cd131286b53c415b131666d71173bb6e3fe59361b3
+  pwd_hash: b7c49812d6b88357b42feae50ecebec294c6092e497fa1612a1415663b56edfe
+  salt: b"`\xbe\x9c.\xe6\xce*\x03\x17h\xe6\x8d\xbc'\x9e\xcf"

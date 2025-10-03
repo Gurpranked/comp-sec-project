@@ -1,7 +1,7 @@
 [project]
 name = "comp-sec-project"
 version = "0.1.0"
-description = "Add your description here"
+description = "Computer Security Final Project - Fall 2025"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
