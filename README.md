@@ -1,9 +1,21 @@
-# Intro to Computer Security
+# Intro to Computer Security: Final Project
+
+
+## Getting Started
+
+> [!NOTE]
+> This project requires [`uv`](https://docs.astral.sh/uv/).
+
+1. `uv run main.py'
+
+Dependencies and packages are autocofigured by to run the program.
+Activate the virtual env using `source .venv/bin/activate`.
+Deactivte by typing `deactivate`
 
 ## Todo
 - [x] Review the material for the project
 - [x] Review the file transfer code 
-
+- [ ] Work on implementing login functionality with comparing hashes 
 
 ## Milestone 1: User Registration
 - [x] Implement User Registration **without** security controls
