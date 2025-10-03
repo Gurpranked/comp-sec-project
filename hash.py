@@ -7,18 +7,14 @@ import os
 
 def hash(item: str, salt = None):
 	if salt:
-		item_salt = b'item' + salt
-		hashed = hashlib.sha256(item_salt)
+		hashed = hashlib.sha256(item + salt)
 		return hashed.hexdigest()
 	else:
 		return hashlib.sha256(b'item').hexdigest()
  
 def compare_hash(item: str, hashed_item: str, salt = None) -> bool:
-	if salt:
-		item_salt = b'item' + salt
-		hashed = hashlib.sh256(item_salt)
-		return (hashed.hexdigest() == hashed_item) 
-	else:
-		hashed = hashlib.sha256(item)
-		return (hashed.hexdigest() == hashed_item)
-			
+	return hashed_item == hash(item, salt)	
+
+def generate_digest(message: str):
+	return hashlib.sha256(message.encode()).hexdigest()
+
