@@ -7,6 +7,7 @@ import hashlib
 import yaml
 import os
 
+# Currently unused
 PEPPER = "somegoodpeppa"
 
 def user_registration(creds_filename: str):
@@ -29,10 +30,10 @@ def user_registration(creds_filename: str):
      
     # Something something user registered
     data = {
-        f'{hashed_email}': {
-            'name': f'{hashed_name}',
-            'pwd_hash': f'{hashed_pwd}',
-            'salt': f'{pwd_salt}',
+        hashed_email: {
+            'name': hashed_name,
+            'pwd_hash': hashed_pwd,
+            'salt': f'{pwd_salt.hex()}',
         }
     }
 
