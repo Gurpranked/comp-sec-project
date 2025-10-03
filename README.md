@@ -6,11 +6,13 @@
 > [!NOTE]
 > This project requires [`uv`](https://docs.astral.sh/uv/).
 
-1. `uv run main.py`
+Run the program using:`uv run main.py`
 
 Dependencies and packages are autocofigured by to run the program.
+
 Activate the virtual env using `source .venv/bin/activate`.
-Deactivte by typing `deactivate`
+
+Deactivate by typing `deactivate`.
 
 ## Todo
 - [x] Review the material for the project
