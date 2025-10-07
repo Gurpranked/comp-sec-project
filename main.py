@@ -25,7 +25,7 @@ def driver():
 	# Login user
 	else:
 		user_login()
-		print("Login Successfull")
+		print("Login Successful")
 		start_repl()
 
 

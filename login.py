@@ -4,6 +4,7 @@
 from getpass import getpass
 from bcolors import bcolors
 from hash import hash, hash_compare
+import gc
 import hashlib
 import yaml
 import os
@@ -31,6 +32,17 @@ def lookup_and_validate(email: str, pwd: str):
 		salt = user_creds[hashed_email]['salt']
 		stored_pwd = user_creds[hashed_email]['pwd']
 		if hash_compare(email, stored_pwd, salt):
+			
+			# Flush user credentials from memory 
+			del user_creds
+			# Run garbage collector manually
+			gc.collect()
+
 			return True
 		else:
+			# Flush user credentials from memory
+			del user_creds
+			# Run garbage collector manually
+			gc.collect()
+
 			return False

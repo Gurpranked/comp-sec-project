@@ -17,19 +17,19 @@ Deactivate by typing `deactivate`
 ## Todo
 - [x] Review the material for the project
 - [x] Review the file transfer code 
-- [ ] Work on implementing login functionality with comparing hashes 
+- [x] Work on implementing login functionality with comparing hashes 
 
 ## Milestone 1: User Registration
 - [x] Implement User Registration **without** security controls
 - [x] Leverage Python APIs and `crypt` library for salted hashes on passwords
-- [ ] Hash all user credentials instead of storing in plaintext, including name, email, etc 
-- [ ] Assume CAs for digital certificates
+- [x] Hash all user credentials instead of storing in plaintext, including name, email, etc 
+- [x] Assume CAs for digital certificates
 
 ## Milestone 2: User Login 
-- [ ] Flush credentials from memory after program's exit
+- [x] Flush credentials from memory after program's exit
 
 ## Milestone 3: Adding Contacts
-- [ ] No need for DB implementation, YAML, JSON adequate
+- [x] No need for DB implementation, YAML, JSON adequate
 - [ ] Prevent unauthorized access to data
 
 ## Milestone 4: Listing Contacts
