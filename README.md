@@ -18,7 +18,7 @@ Deactivate by typing `deactivate`
 - [x] Review the material for the project
 - [x] Review the file transfer code 
 - [x] Work on implementing login functionality with comparing hashes 
-
+- [ ] Implement graceful exit for the exit command 
 ## Milestone 1: User Registration
 - [x] Implement User Registration **without** security controls
 - [x] Leverage Python APIs and `crypt` library for salted hashes on passwords
@@ -31,6 +31,7 @@ Deactivate by typing `deactivate`
 ## Milestone 3: Adding Contacts
 - [x] No need for DB implementation, YAML, JSON adequate
 - [ ] Prevent unauthorized access to data
+- [ ] Use AES Key to encrypt the file and store hash of AES key in user credentials with salt
 
 ## Milestone 4: Listing Contacts
 - [ ] Display contact info only if user has added the contact, contact has reciprocated, contact is online on the network. 
