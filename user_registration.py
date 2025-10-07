@@ -32,7 +32,7 @@ def user_registration(creds_filename: str):
     data = {
         hashed_email: {
             'name': hashed_name,
-            'pwd_hash': hashed_pwd,
+            'pwd': hashed_pwd,
             'salt': f'{pwd_salt.hex()}',
         }
     }
@@ -41,9 +41,3 @@ def user_registration(creds_filename: str):
         yaml.dump(data, file)
 
     print("User Registered.")
-
-# def hash_pwd(pwd):
-#    salt = os.urandom(16)
-#    pwd_salt = b'pwd' + salt
-#    pwd_hash = hashlib.sha256(pwd_salt)
-#    return pwd_hash.hexdigest()
