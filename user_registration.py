@@ -1,11 +1,13 @@
 # Copyright 2025
 # Author: Gurpreet Singh
+
+from base64 import b64encode
+from os import urandom
 from getpass import getpass
 from bcolors import bcolors
 from hash import hash
 import hashlib
 import yaml
-import os
 
 # Currently unused
 PEPPER = "somegoodpeppa"
@@ -22,18 +24,18 @@ def user_registration(creds_filename: str):
             print(f"{bcolors.FAIL}Passwords don't match, try again{bcolors.ENDC}")
      
     print(f"\n{bcolors.OKGREEN}Passwords match.{bcolors.ENDC}")    
-
-    pwd_salt = os.urandom(16)
+    
+    salt = urandom(16)
     hashed_email = hash(email)
     hashed_name = hash(full_name)
-    hashed_pwd = hash(pwd, pwd_salt)
+    hashed_pwd = hash(pwd, salt)
      
     # Something something user registered
     data = {
         hashed_email: {
             'name': hashed_name,
             'pwd': hashed_pwd,
-            'salt': f'{pwd_salt.hex()}',
+            'salt': f'{salt}',
         }
     }
 

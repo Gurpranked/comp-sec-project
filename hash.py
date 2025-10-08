@@ -5,9 +5,9 @@ import hashlib
 import yaml
 import os
 
-def hash(item, salt = None):
+def hash(item: str, salt = None):
 	if salt:
-		hashed = hashlib.sha256(b'item' + b'salt')
+		hashed = hashlib.sha256(item.encode('utf-8') + salt)
 		return hashed.hexdigest()
 	else:
 		return hashlib.sha256(b'item').hexdigest()
