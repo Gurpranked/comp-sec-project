@@ -34,15 +34,15 @@ def lookup_and_validate(email: str, pwd: str):
 		if hash_compare(email, stored_pwd, salt):
 			
 			# Flush user credentials from memory 
-			del user_creds
+			#del user_creds
 			# Run garbage collector manually
-			gc.collect()
+			#gc.collect()
 
 			return True
 		else:
 			# Flush user credentials from memory
-			del user_creds
+			#del user_creds
 			# Run garbage collector manually
-			gc.collect()
+			#gc.collect()
 
 			return False
