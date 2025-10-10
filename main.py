@@ -24,7 +24,7 @@ def driver():
     
 	# Login user
 	else:
-		user_login()
+		email, name = user_login()
 		start_repl()
 
 

@@ -31,5 +31,9 @@ def user_login():
 		authenticated = lookup_and_validate(email, pwd)
 		if (authenticated == False):	
 			print("Email and Password Combination Invalid.\n")
-
-
+	hashed_email = hash(email)	
+	with open('creds.yml', 'r') as f:
+		user_creds = yaml.load(f, Loader=yaml.SafeLoader)
+		name = user_creds[hashed_email]['name']
+	
+	return (email, name)	
