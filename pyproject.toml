@@ -5,6 +5,7 @@ description = "Computer Security Final Project - Fall 2025"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cryptography>=46.0.3",
     "pycryptodome>=3.23.0",
     "pyyaml>=6.0.3",
 ]

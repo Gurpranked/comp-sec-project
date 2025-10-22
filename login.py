@@ -13,7 +13,7 @@ def lookup_and_validate(email: str, pwd: str):
 	hashed_email = hash(email)
 
 	# Open credential file 
-	with open('creds.yml', 'r') as f:
+	with open('creds.yaml', 'r') as f:
 		user_creds = yaml.load(f, Loader=yaml.SafeLoader)
 	
 		try:

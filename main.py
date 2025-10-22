@@ -7,7 +7,7 @@ from bcolors import bcolors
 from login import user_login
 from repl import start_repl
 import os
-CREDS_FILENAME = "creds.yml"
+CREDS_FILENAME = "creds.yaml"
 
 def driver():
 	# User Credentials don't exist

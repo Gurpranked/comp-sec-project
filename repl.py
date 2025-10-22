@@ -1,13 +1,16 @@
 # Copyright 2025
 # Author: Gurpreet Singh
 
+from add import add
+
 def help_message():
 	print("  \"add\" -> Add a new contact\n  \"list\" -> List all online contacts\n  \"send\" -> Transfer file to contact\n  \"exit\" -> Exit SecureDrop\n")
 
 
 def start_repl():
 	commands = {
-		"help": help_message
+		"help": help_message,
+                "add": add
 	}	
 	print("Welcome to SecureDrop.\nType \"help\" for Commands.\n")
 	while True:
