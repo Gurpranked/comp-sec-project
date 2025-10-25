@@ -30,8 +30,8 @@ Deactivate by typing `deactivate`
 
 ## Milestone 3: Adding Contacts
 - [x] No need for DB implementation, YAML, JSON adequate
-- [ ] Prevent unauthorized access to data
-- [ ] Use AES Key to encrypt the contacts data, secure the key
+- [x] Prevent unauthorized access to data
+- [x] Use AES Key to encrypt the contacts data, secure the key
 
 ## Milestone 4: Listing Contacts
 - [ ] Display contact info only if user has added the contact, contact has reciprocated, contact is online on the network. 
