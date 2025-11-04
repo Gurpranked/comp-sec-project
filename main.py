@@ -3,7 +3,6 @@
 
 from user_registration import user_registration
 from getpass import getpass
-from bcolors import bcolors
 from login import user_login
 from repl import start_repl
 import os

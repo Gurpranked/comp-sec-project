@@ -32,7 +32,7 @@ def user_login():
 		if (authenticated == False):	
 			print("Email and Password Combination Invalid.\n")
 	hashed_email = hash(email)	
-	with open('creds.yml', 'r') as f:
+	with open('creds.yaml', 'r') as f:
 		user_creds = yaml.load(f, Loader=yaml.SafeLoader)
 		name = user_creds[hashed_email]['name']
 	
