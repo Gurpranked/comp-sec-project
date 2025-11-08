@@ -1,10 +1,11 @@
 # Copyright 2025
 # Author: Gurpreet Singh
 
-from user_registration import user_registration
+from commands.user_registration import user_registration
 from getpass import getpass
-from login import user_login
+from commands.login import user_login
 from repl import start_repl
+from file_ops.file_transfer import start_receiver
 import os
 CREDS_FILENAME = "creds.yaml"
 

@@ -3,7 +3,7 @@
 
 from getpass import getpass
 from bcolors import bcolors
-from hash import hash, hash_compare
+from utils.hash import hash, hash_compare
 import gc
 import hashlib
 import yaml

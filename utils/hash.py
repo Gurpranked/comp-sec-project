@@ -1,5 +1,6 @@
 # Copyright 2025
 # Author: Gurpreet Singh
+
 from bcolors import bcolors
 import hashlib
 import yaml

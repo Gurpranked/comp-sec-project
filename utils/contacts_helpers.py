@@ -5,8 +5,8 @@ import yaml
 from cryptography.fernet import Fernet
 from os.path import exists
 
-CONTACTS_FILENAME="contacts.yaml"
-CONTACTS_KEY_FILENAME="contacts_key.key"
+CONTACTS_FILENAME="../yaml/contacts.yaml"
+CONTACTS_KEY_FILENAME="../keys/contacts_key.key"
 
 # Create, save, and return key
 def create_key():

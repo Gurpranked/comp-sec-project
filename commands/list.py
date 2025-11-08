@@ -2,7 +2,7 @@
 # Author: Gurpreet Singh
 
 import yaml
-from contacts_helpers import read_contacts, contacts_exist, load_key
+from utils.contacts_helpers import read_contacts, contacts_exist, load_key
 from add import add
 
 def list():

@@ -1,10 +1,10 @@
 # Copyright 2025
 # Author: Gurpreet Singh
 
-from base64 import b64encode
 from os import urandom
 from getpass import getpass
-from bcolors import bcolors
+from utils.bcolors import bcolors
+from certificate_authority.CA import publish_to_CA
 from hash import hash
 import hashlib
 import yaml
@@ -25,6 +25,11 @@ def user_registration(creds_filename: str):
      
     print(f"\n{bcolors.OKGREEN}Passwords match.{bcolors.ENDC}")    
     
+    # TODO
+    public_key = ""
+    public_key_algorithm = ""
+    publish_to_CA(email, public_key, public_key_algorithm)
+        
     salt = urandom(16)
     hashed_email = hash(email)
     hashed_name = hash(full_name)
