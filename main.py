@@ -7,6 +7,7 @@ from commands.login import user_login
 from repl import start_repl
 from file_ops.file_transfer import start_receiver
 import os
+import threading
 CREDS_FILENAME = "creds.yaml"
 
 def driver():

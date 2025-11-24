@@ -1,0 +1,28 @@
+version: "3.9" 
+services: 
+    ca: 
+        image: ca-image:latest
+        container_name: ca
+        build: 
+            context: ./ca 
+        networks: 
+            - pgpnet 
+        ports: 
+            - "4444:4444" # CA reachable from host 
+        volumes: 
+            - ./ca/data:/app/db
+        restart: unless-stopped 
+    
+    client_template: 
+        build: 
+            context: ./client 
+        image: client_template:latest 
+        networks: 
+            - pgpnet 
+        entrypoint: [ "sleep", "infinity" ] # This service is not started; REPL uses the image only. 
+
+networks: 
+    pgpnet: 
+        driver: bridge
+        attachable: true
+

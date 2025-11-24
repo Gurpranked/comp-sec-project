@@ -6,7 +6,6 @@ from getpass import getpass
 from utils.bcolors import bcolors
 from certificate_authority.CA import publish_to_CA
 from hash import hash
-import hashlib
 import yaml
 
 # Currently unused
