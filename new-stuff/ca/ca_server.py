@@ -34,15 +34,15 @@ def save_users(data):
 # -----------------------------------------------------
 
 def handle_register(data):
-    username = data.get("username")
+    email = data.get("email")
     public_key = data.get("public_key")
 
-    if not username or not public_key:
+    if not email or not public_key:
         return {"status": "error", "message": "Bad request"}
 
     users = load_users()
 
-    if username in users:
+    if email_hash in users:
         return {"status": "error", "message": "User exists"}
 
     # Import user key
@@ -61,7 +61,7 @@ def handle_register(data):
     signed_key = gpg.export_keys(fp)
 
     # Store user entry
-    users[username] = {
+    users[email_hash] = {
         "fp": fp,
         "public_key": signed_key
     }
@@ -71,30 +71,30 @@ def handle_register(data):
 
 
 def handle_remove_user(data):
-    username = data.get("username")
+    email_hash = data.get("email_hash")
     users = load_users()
 
-    if username not in users:
+    if email_hash not in users:
         return {"status": "error", "message": "No such user"}
 
     # Remove key from CA keyring
-    fp = users[username]["fp"]
+    fp = users[email_hash]["fp"]
     gpg.delete_keys(fp, secret=False)
 
-    users.pop(username)
+    users.pop(email_hash)
     save_users(users)
 
-    return {"status": "success", "message": f"User '{username}' removed"}
+    return {"status": "success", "message": f"User removed"}
 
 
 def handle_get_key(data):
-    username = data.get("username")
+    email_hash = data.get("email_hash")
     users = load_users()
 
-    if username not in users:
+    if email_hash not in users:
         return {"status": "error", "message": "No such user"}
 
-    return {"status": "success", "public_key": users[username]["public_key"]}
+    return {"status": "success", "public_key": users[email_hash]["public_key"]}
 
 
 # -----------------------------------------------------
