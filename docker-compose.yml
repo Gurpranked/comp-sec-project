@@ -6,23 +6,27 @@ services:
         build: 
             context: ./ca 
         networks: 
-            - pgpnet 
+            - securedrop-net
         ports: 
             - "4444:4444" # CA reachable from host 
         volumes: 
+            - ./ca/tls:/tls_public
+            - ./ca/gnupg:/gnupg_home
             - ./ca/data:/app/db
         restart: unless-stopped 
     
+    # Template image for client containers
+    # Requires --build flag with docker-compose
     client_template: 
         build: 
             context: ./client 
         image: client_template:latest 
-        networks: 
-            - pgpnet 
-        entrypoint: [ "sleep", "infinity" ] # This service is not started; REPL uses the image only. 
+        networks:
+            - securedrop-net
 
 networks: 
     pgpnet: 
+        name: securedrop-net
         driver: bridge
         attachable: true
 

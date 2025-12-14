@@ -2,34 +2,55 @@
 import hashlib
 import json
 import os
-import shutil
 import sys
+import re
+import subprocess
 from getpass import getpass
 from pathlib import Path
-import subprocess
 
 # ------------------------------------------------------
 # Paths & configs
 # ------------------------------------------------------
-HOME = Path.home()
-BASE_DIR = HOME / "pgp_clients"
+BASE_DIR = Path.home() / "securedrop_clients"
 BASE_DIR.mkdir(exist_ok=True)
-USER_DB_PATH = BASE_DIR / "users.json"
-CLIENT_IMAGE = "client_template:latest"
 
-VERBOSE=True
+
+USER_DB = BASE_DIR / "users.json"
+CLIENT_IMAGE = "client_template:latest"
+NETWORK = "securedrop-net"
 
 # ------------------------------------------------------
 # Helpers
 # ------------------------------------------------------
 
-def load_users():
-    if USER_DB_PATH.exists():
-        return json.loads(USER_DB_PATH.read_text())
-    return {}
+def is_strong_password(password: str) -> bool:
+    """
+    Check whether a password meets basic strength requirements.
+    
+    Requirements:
+    - At least 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one number
+    - At least one special character
+    """
+    if len(password) < 8:
+        return False
 
-def save_users(users):
-    USER_DB_PATH.write_text(json.dumps(users, indent=2))
+    # Requirements using regex
+    has_upper = re.search(r"[A-Z]", password)
+    has_lower = re.search(r"[a-z]", password)
+    has_digit = re.search(r"\d", password)
+    has_special = re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)
+
+    return all([has_upper, has_lower, has_digit, has_special])
+
+
+def load_db():
+    return json.loads(USER_DB_PATH.read_text()) if USER_DB.exists() else {}
+
+def save_db(users):
+    USER_DB.write_text(json.dumps(users, indent=2))
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -42,6 +63,10 @@ def docker_exec(container_name, cmd):
     full_cmd = ["docker", "exec", container_name] + cmd
     result = subprocess.run(full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return result.stdout, result.stderr
+
+def docker(cmd):
+    return subprocess.run(cmd, check=False)
+
 def container_exists(name: str) -> bool:
     """Check if a container with the exact name exists"""
     result = subprocess.run(
@@ -56,23 +81,32 @@ def ensure_network():
         "docker", "network", "create",
         "--driver", "bridge",
         "--attachable",
-        "new-stuff_pgpgnet"
+        "securedrop-net"
     ], stdout=subprocess.DEVNULL, stder=subprocess.DEVNULL)
 
-def start_client_container(container_name, volume_path):
-    """Create and start client container for user"""
-    if not container_exists(container_name):
-        subprocess.run([
-            "docker", "run", "-d",
-            "--name", container_name,
-            "-v", f"{volume_path}:/client_data",
-            "--network", "new-stuff_pgpnet",   # make sure network matches docker-compose
-            CLIENT_IMAGE,
-            "sleep", "infinity"
-        ])
-    else:
-        subprocess.run(["docker", "start", container_name])
+def create_client_container(container_name, email, username, password_hash):
+    subprocess.run([
+        "docker", "run", "-d",
+        "--name", container_name,
+        "-e", f"EMAIL={email}", 
+        "-e", f"USERNAME={username}",
+        "-e", f"PASSWORD_HASH={password_hash}",
+        "--network", "securedrop-net", # make sure network matches docker-compose
+        "-v", f"{CA_CERT}:/tls/ca-cert.pem:ro",
+        CLIENT_IMAGE,
+    ])
 
+def start_client_container(container_name):
+    subprocess.run(["docker", "start", container_name])
+
+def stop_client_container(container_name):  
+    if not container_exists(container_name):
+        print(f"Container: '{container_name}' does not exist.") 
+        print("Doing nothing")
+    else:
+        subprocess.run(["docker", "stop", container_name])
+
+    
 # ------------------------------------------------------
 # CA communication through container
 # ------------------------------------------------------
@@ -96,7 +130,6 @@ class Session:
         self.user = None
         self.container = None
         self.email = None
-        self.sesh_key = None
         self.users_db = load_users()
 
     def prompt(self):
@@ -142,64 +175,92 @@ class Session:
     def register(self):
         username = input("New username: ").strip()
         email = input("New email: ").strip()
-        email_hash = hash_content(email)
+        email_hash = sha256(email)
+       
+        # Check local db
         if email_hash in self.users_db:
             print("User exists.")
             return
+
+        print("""
+    Password Requirements:
+        - At least 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character
+             """) 
         password = getpass("Password: ")
+        confirm = getpass("Confirm Password: ")
+        while password != confirm or not is_strong_password(password):
+            print("Passwords do not match")
+            print("Try again")
+            print("""
+    Password Requirements:
+        - At least 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character
+             """) 
+            password = getpass("Password: ")
+            confirm = getpass("Confirm Password: ")
 
-        # Create container data path
-        username_hash = hash_content(username)
-        user_dir = BASE_DIR / username_hash
-        user_dir.mkdir(parents=True, exist_ok=True)
-        (user_dir / "data").mkdir(exist_ok=True)
-        (user_dir / "pubkeys").mkdir(exist_ok=True)
-        (user_dir / "messages").mkdir(exist_ok=True)
+        password_hash = sha256(password) 
+        username_hash = sha256(username)
+        container_name = f"client_{email_hash[:12]}"
+        create_client_container(container_name, email, username, password_hash)
 
-        container_name = f"client_{username_hash}"
-        start_client_container(container_name, user_dir)
-        
-        # Store signed key in container
-        signed_key = resp["public_key"]
-        docker_exec(container_name, [
-            "bash", "-c",
-            f"echo '{signed_key}' > /client_data/data/signed_pubkey.asc"
-        ])
-
-        # Update host DB
+        # Update host db
         self.users_db[email_hash] = {
-            "container_hash": username_hash,
+            "username": username,
+            "password_hash": password_hash,
+            "container": container_name
         }
         save_users(self.users_db)
+
+        self.user = username
+        self.email = email
+        self.password = password_hash
+        self.container = container_name
         print("Registration successful.")
 
     def login(self):
         email = input("Email: ").strip()
-        email_hash = hash_content(email)
+        email_hash = sha256(email)
+        
         if email_hash not in self.users_db:
             print("User not found.")
             return
+
         password = getpass("Password: ")
-        if hash_password(password) != self.users_db[email_hash]["password_hash"]:
-            print("Incorrect password.")
+        password_hash = hash_content(password)
+        if self.users_db[email_hash]['password_hash'] != password_hash:
+            print("Incorrect credentials.")
             return
 
-        self.user = username
+        self.user = self.users_db[email_hash]['username']
         self.email = email
-        self.container = f"client_{self.users_db[email_hash]['container_hash']}"
-        start_client_container(self.container, BASE_DIR / self.users_db[email_hash]['container_hash'])
+        self.container = self.users_db[email_hash]["container"]
+        start_client_container(self.container)
         print(f"Login successful. Authenticated as {self.user}")
 
     def logout(self):
         if self.user:
             print(f"Logging out {self.user}")
-        self.user = None
-        self.email = None
-        self.container = None
+            if not self.container:
+                return
+            stop_client_container(self.container)
+            self.user = None
+            self.email = None
+            self.container = None
+        else:
+            print("Login first.")
 
+# TODO
     def remove_account(self):
         if not self.user:
-            print("Not logged in.")
+            print("Login first.")
             return
         confirm = input(f"Are you sure you want to delete your account '{self.user}'? (yes/no) ")
         if confirm != "yes":
@@ -207,26 +268,20 @@ class Session:
             return
 
         # Remove from CA
-        resp = ca_request_via_container(self.container, {"command": "remove_user", "username": self.user})
-        if resp.get("status") != "success":
-            print("Failed to remove from CA:", resp.get("message"))
-            return
-
+        docker([
+            "docker", "exec", self.container,
+            "python3", "/client_core/remove_from_ca.py"
+        ])
+    
         # Stop & remove container
         subprocess.run(["docker", "rm", "-f", self.container])
-
-        # Remove user data
-        user_dir = BASE_DIR / self.users_db[self.user]["container_hash"]
-        if user_dir.exists():
-            shutil.rmtree(user_dir)
 
         # Remove from DB
         self.users_db.pop(self.user)
         save_users(self.users_db)
 
+        self.logout()
         print(f"Account '{self.user}' removed successfully.")
-        self.user = None
-        self.container = None
 
     def add_contact(self):
         if not self.user:
@@ -280,5 +335,5 @@ class Session:
 # ------------------------------------------------------
 if __name__ == "__main__":
     repl = Session()
-    erint("Welcome to SecureDrop. Type 'register', 'login', 'exit'...")
+    print("Welcome to SecureDrop. Type 'register', 'login', 'exit'...")
     repl.run()

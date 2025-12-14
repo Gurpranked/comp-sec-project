@@ -21,8 +21,7 @@ COPY client_core /client_core/
 # ------------------------------------------------------
 # Make gnupg home directory
 # ------------------------------------------------------
-RUN mkdir -p /data/gpg_home && chmod 755 /data/gpg_home 
-RUN chmod 755 /data
+RUN mkdir -p /data/gpupg_home && chmod 700 /data/
 
 # ------------------------------------------------------
 # Install Python deps (if any)
@@ -30,7 +29,11 @@ RUN chmod 755 /data
 RUN pip install --no-cache-dir python-gnupg
 
 # ------------------------------------------------------
+# Run registration script
+# ------------------------------------------------------
+RUN python3 /client_core/register.py
+
+# ------------------------------------------------------
 # The container sleeps indefinitely; all work is via docker exec
 # ------------------------------------------------------
 CMD ["sleep", "infinity"]
-

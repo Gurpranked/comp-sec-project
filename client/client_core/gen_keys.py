@@ -10,7 +10,7 @@ def gen_keys(email, username, threat_potential):
        if any(email in uid for k in gpg.list_keys() for uid in k['uids']):
             print("[WARNING] Key for {email} already exists.")
             print("[WARNING] Potential tampering.")
-            # Returns nothing and flags call as potential key regernation for user
+            # Returns nothing and flags call as potential key regen for user
             return None, True
     params = gpg.gen_key_input(
         name_email=email,
@@ -22,5 +22,7 @@ def gen_keys(email, username, threat_potential):
 
     # Export public key to /data/pubkey.asc
     pub = gpg.export_keys(key.fingerprint, armor=True)
-
+   
+    print("[INFO] Keys generated")
+    
     return pub, False
