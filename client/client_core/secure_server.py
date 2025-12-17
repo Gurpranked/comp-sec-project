@@ -8,8 +8,8 @@ from pathlib import Path
 
 # --- Configuration ---
 DATA_DIR = Path("/data")
-CONTACTS_FILE = DATA_DIR / "contacts.json" # <--- Added to track who we trust
-RECEIVE_DIR = DATA_DIR / "received_files"
+CONTACTS_FILE = DATA_DIR / "contacts.json" 
+RECEIVE_DIR = Path("/saved_files")
 RECEIVE_DIR.mkdir(exist_ok=True)
 
 CA_CERT = Path("/tls_public/ca-cert.pem")
@@ -30,7 +30,7 @@ def is_authorized_contact(sender_id):
         # are the full 64-char hashes, we need to find a match.
         # We check if any key in contacts starts with the prefix in the sender_id.
         for email_hash in contacts.keys():
-            if f"sd_client_{email_hash[:12]}" == sender_id:
+            if email_hash[:12] == sender_id:
                 return True
         return False
     except Exception as e:

@@ -213,7 +213,7 @@ class Session:
     def send_file(self):
         if not self.container: return print("Login first.")
         target_email = input("Recipient Email: ").strip()
-        file_path = input("Path to file (inside container /data): ").strip()
+        file_path = input("Path to file (inside container /user_files): ").strip()
         
         target_hash = sha256(target_email)
         res = docker_exec(self.container, ["python3", "/client_core/send_file.py", target_hash, file_path])

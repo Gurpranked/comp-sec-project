@@ -36,8 +36,8 @@ def check_contact_status(email_hash, cert_pem):
                         return "ONLINE (Reciprocated)"
                     return "ONLINE (Not Added Back)" 
 
-    except socket.gaierror as e:
-        return f"Offline (Logged out)"
+    except socket.gaierror:
+        return "OFFLINE (Logged out)"
     except socket.timeout:
         return "OFFLINE (timed out)"
     except ConnectionRefusedError:
