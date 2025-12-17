@@ -40,7 +40,8 @@
                    v            v
              +---------------------+
              |    CA Container     |
-             |   (PGP Authority)   |
+             | (User Ceritificate) |
+             | (Signer and issuer) |
              +---------------------+
 ```
 # Currently implemented
