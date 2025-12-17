@@ -1,80 +1,86 @@
 #!/usr/bin/env python3
-import sys
+import os
+import ssl
 import json
+import struct
+import socket
 import hashlib
-import gnupg
 from pathlib import Path
-from ca_client import CAClient
 
-# -----------
-# Paths
-# -----------
+# --- Configuration ---
+CA_HOST = "ca"
+CA_PORT = 4444
+DATA_DIR = Path("/data")
+CA_CERT_PATH = Path("/tls_public/ca-cert.pem")
+CONTACTS_FILE = DATA_DIR / "contacts.json"
 
-GNUPG_HOME = "/data/gnupg_home"
-CONTACTS_DIR = Path("/data/contacts")
-CONTACTS_DIR.mkdir(exists_ok=True)
+def hash_email(email: str) -> str:
+    return hashlib.sha256(email.encode()).hexdigest()
 
-CA_GNUPG_KEYRING = "/data/ca_pubkey.asc" # imported at build/runtime
+# --- Framing Helpers ---
+def send_msg(sock, obj):
+    data = json.dumps(obj).encode('utf-8')
+    sock.sendall(struct.pack("!I", len(data)) + data)
 
-gpg = gnupg.GPG(gnupghome=GNUPG_HOME)
+def recv_msg(sock):
+    header = sock.recv(4)
+    if not header: return None
+    length = struct.unpack("!I", header)[0]
+    buf = b""
+    while len(buf) < length:
+        chunk = sock.recv(min(length - len(buf), 4096))
+        if not chunk: break
+        buf += chunk
+    return json.loads(buf.decode('utf-8'))
 
+# --- Contact Management ---
+def save_contact(email_hash, certificate_pem, email_plaintext):
+    contacts = {}
+    if CONTACTS_FILE.exists():
+        with open(CONTACTS_FILE, "r") as f:
+            contacts = json.load(f)
+    
+    contacts[email_hash] = {
+        "certificate": certificate_pem,
+        "email": email_plaintext 
+    }
+    
+    with open(CONTACTS_FILE, "w") as f:
+        json.dump(contacts, f, indent=4)
 
+def add_contact(target_email):
+    target_hash = hash_email(target_email)
+    print(f"[INFO] Looking up certificate for {target_email}...")
 
-# -----------
-# Helpers
-# -----------
-def sha256(s: str) -> str:
-    return hashlib.sha256(s.encode()).hexdigest()
+    # Connect to CA via TLS
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(CA_CERT_PATH))
+    
+    try:
+        with socket.create_connection((CA_HOST, CA_PORT)) as raw_sock:
+            with context.wrap_socket(raw_sock, server_hostname=CA_HOST) as tls_sock:
+                
+                # Request the public key (certificate) from CA
+                request = {
+                    "action": "get_public_key",
+                    "email_hash": target_hash
+                }
+                send_msg(tls_sock, request)
+                
+                response = recv_msg(tls_sock)
+                
+                if response.get("status") == "success":
+                    cert_pem = response.get("signed_certificate")
+                    save_contact(target_hash, cert_pem, target_email)
+                    print(f"[SUCCESS] Contact {target_email} added and certificate stored locally.")
+                else:
+                    print(f"[ERROR] Could not add contact: {response.get('message')}")
 
-def fail(msg:
-    print(json.dumps({"status": "error", "message": msg})
-    sys.exit(1)
+    except Exception as e:
+        print(f"[FATAL] Connection error: {e}")
 
-def add_contact():
-    if len(sys.argv) != 2:
-        fail("Usage: add_contact.py <email>")
-    
-    email = sys.argv[1].strip()
-    email_hash = sha256(email)
-    
-    # Request signed public key
-    with CAClient() as ca:
-        resp = ca.request({
-            "action": "get_public_key",
-            "email_hash": email_hash
-        }
-    
-    if resp.get("status") != "success":
-        fail(resp.get("message", "CA lookup failed"))
-    
-    signed_key = resp.get("signed_public_key")
-    
-    if not signed_key:
-        fail("No public key returned")
-    
-    # Verify CA signature
-    verified = gpg.verify(signed_key)
-    if not verified:
-        fail("CA signature verification failed")
-    
-    import_result = gpg.import_keys(str(signed_key))
-    if not import_result.fingerprints:
-        fail("Failed to import contact key")
-    
-    fingerprint = import_result.fingerprints[0]
-    
-    # Store contact metadata
-    contact_file = CONTACTS_DIR / f"{email_hash}.json"
-    contact_file.write_text(json.dumps({
-        "email_hash": email_hash,
-        "fingerprint": fingerprint
-    }, indent=2)
-
-    print(json.dumps({
-        "status": "success",
-        "fingerprint": fingerprint
-    }))
-    
-    
-if __name__=="__main__":
-    add_contact()
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python3 add_contact.py <email>")
+    else:
+        add_contact(sys.argv[1])

@@ -14,113 +14,38 @@ from pathlib import Path
 BASE_DIR = Path.home() / "securedrop_clients"
 BASE_DIR.mkdir(exist_ok=True)
 
-
 USER_DB = BASE_DIR / "users.json"
 CLIENT_IMAGE = "client_template:latest"
 NETWORK = "securedrop-net"
+# This matches the VOLUME defined in your CA Dockerfile
+TLS_VOLUME = "securedrop_tls_public" 
 
 # ------------------------------------------------------
 # Helpers
 # ------------------------------------------------------
 
-def is_strong_password(password: str) -> bool:
-    """
-    Check whether a password meets basic strength requirements.
-    
-    Requirements:
-    - At least 8 characters
-    - At least one uppercase letter
-    - At least one lowercase letter
-    - At least one number
-    - At least one special character
-    """
-    if len(password) < 8:
-        return False
+def sha256(content):
+    return hashlib.sha256(content.encode()).hexdigest()
 
-    # Requirements using regex
-    has_upper = re.search(r"[A-Z]", password)
-    has_lower = re.search(r"[a-z]", password)
-    has_digit = re.search(r"\d", password)
-    has_special = re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)
-
-    return all([has_upper, has_lower, has_digit, has_special])
-
-
-def load_db():
-    return json.loads(USER_DB_PATH.read_text()) if USER_DB.exists() else {}
-
-def save_db(users):
-    USER_DB.write_text(json.dumps(users, indent=2))
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def hash_content(message):
-    return hashlib.sha256(message.encode()).hexdigest()[:16]
-
-def docker_exec(container_name, cmd):
-    """Run command inside container and return stdout, stderr"""
-    full_cmd = ["docker", "exec", container_name] + cmd
-    result = subprocess.run(full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    return result.stdout, result.stderr
-
-def docker(cmd):
-    return subprocess.run(cmd, check=False)
-
-def container_exists(name: str) -> bool:
-    """Check if a container with the exact name exists"""
-    result = subprocess.run(
-        ["docker", "ps", "-a", "--filter", f"name=^{name}$", "-q"],
-        capture_output=True,
-        text=True
-    )
-    return bool(result.stdout.strip())
+def volume_name_for_user(email_hash: str) -> str:
+    return f"sd_data_{email_hash[:12]}"
 
 def ensure_network():
-    subproces.run([ 
-        "docker", "network", "create",
-        "--driver", "bridge",
-        "--attachable",
-        "securedrop-net"
-    ], stdout=subprocess.DEVNULL, stder=subprocess.DEVNULL)
+    subprocess.run(["docker", "network", "create", NETWORK], 
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def create_client_container(container_name, email, username, password_hash):
-    subprocess.run([
-        "docker", "run", "-d",
-        "--name", container_name,
-        "-e", f"EMAIL={email}", 
-        "-e", f"USERNAME={username}",
-        "-e", f"PASSWORD_HASH={password_hash}",
-        "--network", "securedrop-net", # make sure network matches docker-compose
-        "-v", f"{CA_CERT}:/tls/ca-cert.pem:ro",
-        CLIENT_IMAGE,
+def docker_exec(container_name, cmd):
+    full_cmd = ["docker", "exec", container_name] + cmd
+    return subprocess.run(full_cmd, capture_output=True, text=True)
+
+def is_strong_password(password: str) -> bool:
+    if len(password) < 8: return False
+    return all([
+        re.search(r"[A-Z]", password),
+        re.search(r"[a-z]", password),
+        re.search(r"\d", password),
+        re.search(r"[!@#$%^&*()]", password)
     ])
-
-def start_client_container(container_name):
-    subprocess.run(["docker", "start", container_name])
-
-def stop_client_container(container_name):  
-    if not container_exists(container_name):
-        print(f"Container: '{container_name}' does not exist.") 
-        print("Doing nothing")
-    else:
-        subprocess.run(["docker", "stop", container_name])
-
-    
-# ------------------------------------------------------
-# CA communication through container
-# ------------------------------------------------------
-def ca_request_via_container(container_name, payload):
-    """Send request to CA through the client's container"""
-    payload_json = json.dumps(payload)
-    cmd = ["python3", "ca_client.py", payload_json]
-    out, err = docker_exec(container_name, cmd)
-    if err.strip():
-        return {"status": "error", "message": err.strip()}
-    try:
-        return json.loads(out)
-    except Exception:
-        return {"status": "error", "message": "Invalid CA response"}
 
 # ------------------------------------------------------
 # REPL session
@@ -130,7 +55,14 @@ class Session:
         self.user = None
         self.container = None
         self.email = None
-        self.users_db = load_users()
+        ensure_network()
+        self.users_db = self.load_db()
+
+    def load_db(self):
+        return json.loads(USER_DB.read_text()) if USER_DB.exists() else {}
+
+    def save_db(self):
+        USER_DB.write_text(json.dumps(self.users_db, indent=2))
 
     def prompt(self):
         return f"SecureDrop@{self.user if self.user else 'guest'}> "
@@ -138,92 +70,87 @@ class Session:
     def run(self):
         while True:
             try:
-                cmd = input(self.prompt()).strip()
+                cmd = input(self.prompt()).strip().lower()
                 if cmd == "exit":
-                    # Logout first 
-                    if self.user and self.container:
-                        self.logout()
+                    if self.container: self.logout()
                     break
-                if not cmd:
-                    continue
+                if not cmd: continue
 
-                if cmd.startswith("register"):
-                    self.register()
-                elif cmd.startswith("login"):
-                    self.login()
-                elif cmd.startswith("logout"):
-                    self.logout()
-                elif cmd.startswith("remove"):
-                    self.remove_account()
-                elif cmd.startswith("add"):
-                    self.add_contact()
-                elif cmd.startswith("list"):
-                    self.list_contacts()
-                elif cmd.startswith("send"):
-                    self.send_message()
-                elif cmd.startswith("help"):
-                    self.help_message()
-                else:
-                    print("Unknown command")
+                if cmd == "register": self.register()
+                elif cmd == "login": self.login()
+                elif cmd == "logout": self.logout()
+                elif cmd == "remove": self.remove_account()
+                elif cmd == "add": self.add_contact()
+                elif cmd == "list": self.list_contacts()
+                elif cmd == "send": self.send_file()
+                elif cmd == "help": self.help_message()
+                else: print("Unknown command")
             except KeyboardInterrupt:
-                print("\nExiting REPL.")
+                if self.container:
+                    self.logout()
+                print("\nExiting.")
                 break
 
-    # --------------------------------------------------
-    # Commands
-    # --------------------------------------------------
+    # --- Commands ---
+
     def register(self):
-        username = input("New username: ").strip()
-        email = input("New email: ").strip()
+        username = input("Username: ").strip()
+        email = input("Email: ").strip()
         email_hash = sha256(email)
-       
-        # Check local db
+
         if email_hash in self.users_db:
-            print("User exists.")
+            print("User already exists.")
             return
 
-        print("""
-    Password Requirements:
-        - At least 8 characters
-        - At least one uppercase letter
-        - At least one lowercase letter
-        - At least one number
-        - At least one special character
-             """) 
         password = getpass("Password: ")
-        confirm = getpass("Confirm Password: ")
-        while password != confirm or not is_strong_password(password):
-            print("Passwords do not match")
-            print("Try again")
-            print("""
-    Password Requirements:
-        - At least 8 characters
-        - At least one uppercase letter
-        - At least one lowercase letter
-        - At least one number
-        - At least one special character
-             """) 
+        while not is_strong_password(password):
+            print("Password too weak.")
             password = getpass("Password: ")
-            confirm = getpass("Confirm Password: ")
 
-        password_hash = sha256(password) 
-        username_hash = sha256(username)
-        container_name = f"client_{email_hash[:12]}"
-        create_client_container(container_name, email, username, password_hash)
+        container_name = f"sd_client_{email_hash[:12]}"
+        # Safety Check: If container exists but user isn't in DB, wipe it
+        check = subprocess.run(["docker", "ps", "-a", "-q", "-f", f"name={container_name}"], capture_output=True, text=True)
+        if check.stdout.strip():
+            print("[INFO] Cleaning up stale container from a previous failed session...")
+            subprocess.run(["docker", "rm", "-f", container_name])
 
-        # Update host db
+        user_vol = volume_name_for_user(email_hash)
+
+        # 1. Ensure the persistent data volume exists for this specific user
+        subprocess.run(["docker", "volume", "create", user_vol], 
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # 2. Start container with corrected argument list
+        # Ensure every flag is its own string followed by its value string
+        cmd = [
+            "docker", "run", "-d",
+            "--name", container_name,
+            "-e", f"EMAIL={email}",
+            "-e", f"USERNAME={username}",
+            "-e", "CA_HOST=ca", 
+            "--network", NETWORK,         # "securedrop-net"
+            "--network-alias", container_name,
+            "-v", f"{user_vol}:/data",
+            "-v", f"{TLS_VOLUME}:/tls_public:ro",
+            CLIENT_IMAGE                  # "client_template:latest"
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"[ERROR] Docker failed to start: {result.stderr}")
+            return
+
         self.users_db[email_hash] = {
             "username": username,
-            "password_hash": password_hash,
-            "container": container_name
+            "container": container_name,
+            "volume": user_vol
         }
-        save_users(self.users_db)
+        self.save_db()
+        
+        self.user, self.email, self.container = username, email, container_name
+        print("Registration and identity generation successful.")
 
-        self.user = username
-        self.email = email
-        self.password = password_hash
-        self.container = container_name
-        print("Registration successful.")
 
     def login(self):
         email = input("Email: ").strip()
@@ -233,107 +160,90 @@ class Session:
             print("User not found.")
             return
 
-        password = getpass("Password: ")
-        password_hash = hash_content(password)
-        if self.users_db[email_hash]['password_hash'] != password_hash:
-            print("Incorrect credentials.")
-            return
-
         self.user = self.users_db[email_hash]['username']
         self.email = email
         self.container = self.users_db[email_hash]["container"]
-        start_client_container(self.container)
-        print(f"Login successful. Authenticated as {self.user}")
+        
+        subprocess.run(["docker", "start", self.container])
+        print(f"Logged in as {self.user}. Client listener started.")
 
     def logout(self):
-        if self.user:
-            print(f"Logging out {self.user}")
-            if not self.container:
-                return
-            stop_client_container(self.container)
-            self.user = None
-            self.email = None
-            self.container = None
+        if self.container:
+            subprocess.run(["docker", "stop", self.container])
+            print(f"Logged out {self.user}.")
+            self.user = self.email = self.container = None
         else:
-            print("Login first.")
-
-# TODO
-    def remove_account(self):
-        if not self.user:
-            print("Login first.")
-            return
-        confirm = input(f"Are you sure you want to delete your account '{self.user}'? (yes/no) ")
-        if confirm != "yes":
-            print("Aborted.")
-            return
-
-        # Remove from CA
-        docker([
-            "docker", "exec", self.container,
-            "python3", "/client_core/remove_from_ca.py"
-        ])
-    
-        # Stop & remove container
-        subprocess.run(["docker", "rm", "-f", self.container])
-
-        # Remove from DB
-        self.users_db.pop(self.user)
-        save_users(self.users_db)
-
-        self.logout()
-        print(f"Account '{self.user}' removed successfully.")
+            print("No active session.")
 
     def add_contact(self):
-        if not self.user:
-            print("Login first.")
-            return
-        target = input("Contact username: ").strip()
-        if target not in self.users_db:
-            print("User not found.")
-            return
-        if target in self.users_db[self.user]["contacts"]:
-            print("Already in contacts.")
-            return
-        self.users_db[self.user]["contacts"].append(target)
-        save_users(self.users_db)
-        print(f"Added {target} to contacts.")
+        if not self.container: return print("Login first.")
+        target = input("Contact email: ").strip()
+        
+        res = docker_exec(self.container, ["python3", "/client_core/add_contact.py", target])
+        print(res.stdout if res.returncode == 0 else res.stderr)
 
     def list_contacts(self):
-        if not self.user:
-            print("Login first.")
-            return
-        contacts = self.users_db[self.user]["contacts"]
-        # Remove deleted accounts
-        contacts = [c for c in contacts if c in self.users_db]
-        self.users_db[self.user]["contacts"] = contacts
-        save_users(self.users_db)
-        print("Contacts:", ", ".join(contacts) if contacts else "No contacts")
+        if not self.container: return print("Login first.")
+        print("Checking contacts (Online & Reciprocity check)...")
+        res = docker_exec(self.container, ["python3", "/client_core/list_contacts.py"])
+        print(res.stdout)
 
-    def send_message(self):
-        if not self.user:
-            print("Login first.")
+    def send_file(self):
+        if not self.container: return print("Login first.")
+        target_email = input("Recipient Email: ").strip()
+        file_path = input("Path to file (inside container /data): ").strip()
+        
+        target_hash = sha256(target_email)
+        res = docker_exec(self.container, ["python3", "/client_core/send_file.py", target_hash, file_path])
+        print(res.stdout)
+
+    
+    def remove_account(self):
+        if not self.container: return print("Login first.")
+        if input(f"Type 'yes' to delete {self.user}: ") != "yes": return
+        
+        email_hash = sha256(self.email)
+        container_name = self.container
+        volume_name = self.users_db[email_hash]["volume"]
+
+        print(f"[CLEANUP] Deleting user session for {self.user}...")
+
+        # 1. Remove the user credentials from the CA
+        print("[INFO] Requesting CA to revoke identity...")
+        res = docker_exec(self.container, ["python3", "/client_core/remove_from_ca.py"])
+        
+        if "Requesting removal for" not in res.stdout:
+            print(f"[WARNING] CA did not acknowledge removal: {res.stdout}")
+ 
+        # 2. Force Stop and Remove Container
+        # The -f flag handles running containers and -v removes associated anonymous volumes
+        subprocess.run(["docker", "rm", "-fv", container_name], capture_output=True)
+
+        # 3. Explicitly Remove the Named Volume
+        # This is critical so that a re-registration starts with a blank slate
+        subprocess.run(["docker", "volume", "rm", "-f", volume_name], capture_output=True)
+
+        # 4. Final Check: Ensure no 'ghost' container exists
+        res = subprocess.run(["docker", "ps", "-a", "-q", "-f", f"name={container_name}"], 
+                             capture_output=True, text=True)
+        if res.stdout.strip():
+            print("[ERROR] Docker failed to release the container name. Manual intervention required.")
             return
-        target = input("Send to (username): ").strip()
-        if target not in self.users_db[self.user]["contacts"]:
-            print("Target not in contacts.")
-            return
-        message = input("Message: ").strip()
-        # Send message via client container
-        target_container = f"client_{self.users_db[target]['container_hash']}"
-        docker_exec(self.container, ["python3", "/client_core/send_message.py", target, message])
-        print("Message sent.")
+
+        # 4. Remove from Host JSON Database
+        del self.users_db[email_hash]
+        self.save_db()
+        
+        # 5. Clear session variables
+        self.user = self.email = self.container = None
+        self.logout()
+        print(f"[SUCCESS] Account {email_hash[:12]} fully purged.") 
+
 
     def help_message(self):
-        if not self.user or not self.container:
-            print("Usage: register, login, exit")
-        else:
-            print("Usage: commands: register, login, logout, remove, add, list, send, help, exit")
-             
+        cmds = ["register", "login", "exit"] if not self.user else \
+               ["add", "list", "send", "remove", "logout", "exit"]
+        print(f"Available commands: {', '.join(cmds)}")
 
-# ------------------------------------------------------
-# Main
-# ------------------------------------------------------
 if __name__ == "__main__":
-    repl = Session()
-    print("Welcome to SecureDrop. Type 'register', 'login', 'exit'...")
-    repl.run()
+    Session().run()

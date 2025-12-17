@@ -3,6 +3,7 @@ import socket
 import ssl
 import json
 import sys
+import struct
 
 CA_HOST = "ca"          # docker-compose service DNS name
 CA_PORT = 4444

@@ -1,122 +1,106 @@
-#!/user/bin/env python3
-
-import gnupg
-import sys
+#!/usr/bin/env python3
 import os
-import stat
-import yaml
+import ssl
+import json
+import struct
+import socket
 import hashlib
-import subprocess
-from ca_client import ca_req
 from pathlib import Path
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
+# --- Configuration ---
+CA_HOST = "ca"
+CA_PORT = 4444
 DATA_DIR = Path("/data")
-GNUPG_HOME = DATA_DIR / "gnupg_home"
-CREDS_PATH = DATA_DIR / "creds.yaml"
-SIGNED_CERT_PATH = DATA_DIR / "signed_pubkey.asc"
+CA_CERT_PATH = "/tls_public/ca-cert.pem" # Mount from Docker Volume
+CLIENT_KEY_PATH = DATA_DIR / "client.key"
+CLIENT_CERT_PATH = DATA_DIR / "client.crt"
 
-# NOTE: Running as binary required these configured environment variables
-# EMAIL: User email
-# USERNAME: Self-explanatory
-# PASSWORD: Hashed
-
-# -----------------
-# Helpers
-# -----------------
 def hash_email(email: str) -> str:
     return hashlib.sha256(email.encode()).hexdigest()
 
-def ensure_dirs():
-    for d in [DATA_DIR, GNUPG_HOME]:
-        d.mkdir(parents=True, exist_ok=True)
+# --- Framing Helpers (Must match Server) ---
+def send_msg(sock, obj):
+    data = json.dumps(obj).encode('utf-8')
+    sock.sendall(struct.pack("!I", len(data)) + data)
 
-def init_gpg():
-    return gnupg.GPG(gnupghome=str(GNUPG_HOME))
+def recv_msg(sock):
+    header = sock.recv(4)
+    if not header: return None
+    length = struct.unpack("!I", header)[0]
+    chunks = []
+    received = 0
+    while received < length:
+        chunk = sock.recv(min(length - received, 4096))
+        if not chunk: break
+        chunks.append(chunk)
+        received += len(chunk)
+    return json.loads(b"".join(chunks).decode('utf-8'))
 
-def generate_keys(gpg, email:str, username:str):
-    # Prevent key overwrite / tampering
-    for key in gpg.list_keys():
-        for uid in key.get("uids", []):
-            if email in uid:
-                raise RuntimeError("GPG key already exists for this email")
+# --- Logic ---
+def register():
+    # 1. Environment Variables
+    email = os.environ.get('EMAIL')
+    username = os.environ.get('USERNAME')
+    if not email or not username:
+        print("[ERROR] EMAIL and USERNAME env vars required.")
+        return
 
-    params = gpg.gen_key_input(
-        name_email=email,
-        name_real=username
-        key_type="RSA",
-        key_length=2048
+    email_hash = hash_email(email)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 2. Generate Private Key for the Client
+    print("[INFO] Generating private key...")
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
     )
 
-    key = gpg.gen_key(params)
-    if not key or not key.fingerprint:
-        raise RuntimeError("GPG key generation failed")
+    # 3. Create Certificate Signing Request (CSR)
+    print("[INFO] Creating CSR...")
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, email_hash),
+        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, username),
+    ])).sign(private_key, hashes.SHA256())
 
-    # Export public key to /data/pubkey.asc
-    pub_key = gpg.export_keys(key.fingerprint, armor=True)
-   
-    print("[INFO] Keys generated")
+    csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+
+    # 4. Connect to CA via TLS
+    print(f"[INFO] Connecting to CA at {CA_HOST}:{CA_PORT}...")
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=CA_CERT_PATH)
     
-    return key.fingerprint, public_key
-
-def store_creds(email_hash, username, password_hash, fingerprint):
-    if CREDS_PATH.exists():
-        raise RuntimeError("Credentials already exist")
-    creds = {
-        "username": username,
-        "email_hash": email_hash,
-        "password_hash": password_hash, 
-        "fingerprint": fingerprint
-        "contacts:": []
-    }
-    
-    with CREDS_PATH.open('w') as f:
-        yaml.dump(creds, f)
-   
-    # Make user credentials file readonly, prevent tampering
-    CREDS_PATH.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-
-    print("[INFO] Credentials stored locally")
-        
-
-def register_with_ca(email:str, username:str, password_hash:str):
-    ensure_dirs()
-    gpg = init_gpg()
-    email_hash = hash_email(email)
-
-    # Generate keys
-    fingerprint, public_key = generate_keys(gpg, email)
-
-    # Make request to CA
-    request = {
-        "action": "register_user",
-        "email_hash": email_hash,
-        "public_key": public_key,
-    }
-    
-    client = CAClient()
-    response = client.request(request)
-    client.close()
-
-    if response.get("status") != "success":
-        raise RuntimeError(f"CA registration failed: {response}")
-    
-    signed_cert = response["signed_certificate"]
-    
-    # Stored signed certificate
-    SIGNED_CERT_PATH.write_text(signed_cert)
-    SIGNED_CERT_PATH.chmod(stat.S_IRUSR | stat.S_IRGPR | stat.S_IROTH)
-    
-    store_credentials_email_hash, username, fingerptint, password_hash)
-    print("[INFO] Registration complete")
-    print(f"[INFO] Fingerprint: {fingerprint}")
+    with socket.create_connection((CA_HOST, CA_PORT)) as raw_sock:
+        with context.wrap_socket(raw_sock, server_hostname=CA_HOST) as tls_sock:
+            
+            # 5. Send Registration Request
+            request = {
+                "action": "register_user",
+                "email_hash": email_hash,
+                "csr": csr_pem
+            }
+            send_msg(tls_sock, request)
+            
+            # 6. Handle Response
+            response = recv_msg(tls_sock)
+            if response.get("status") == "success":
+                # Save the issued certificate
+                CLIENT_CERT_PATH.write_text(response["certificate"])
+                
+                # Save the private key (Keep this secure!)
+                with open(CLIENT_KEY_PATH, "wb") as f:
+                    f.write(private_key.private_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PrivateFormat.TraditionalOpenSSL,
+                        encryption_algorithm=serialization.NoEncryption()
+                    ))
+                
+                print(f"[SUCCESS] Registered as {email_hash}")
+                print(f"[INFO] Certificate saved to {CLIENT_CERT_PATH}")
+            else:
+                print(f"[FATAL] Registration failed: {response.get('message')}")
 
 if __name__ == "__main__":
-    email, username, password_hash = os.environ['EMAIL'], os.environ['USERNAME'], os.environ['PASSWORD_HASH']
-    if not email or not username or not password_hash:
-        print("NOTE: Required env vars: EMAIL, USERNAME, PASSWORD_HASH") 
-        return
-    try:
-        register_with_ca(email, password_hash)
-    except Exception as e:
-        print(f"[FATAL] {e}")
-        sys.exit(1)
+    register()

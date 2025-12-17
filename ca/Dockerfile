@@ -1,66 +1,41 @@
-FROM python:3.12-slim 
+FROM python:3.12-slim
 
-# ------------------------------------------------------
-# Install required system packages
-# ------------------------------------------------------
+# 1. Install OpenSSL for certificate generation
 RUN apt-get update && \
-    apt-get install -y \
-       gnupg \
-       openssl \
-       ca-certificates && \
+    apt-get install -y --no-install-recommends openssl && \
     rm -rf /var/lib/apt/lists/*
 
-# ------------------------------------------------------
-# Create app directory
-# ------------------------------------------------------
-RUN mkdir -p /app && chmod 755 /app
 WORKDIR /app
 
-# ------------------------------------------------------
-# Copy CA server code
-# ------------------------------------------------------
-COPY ca_server.py /app/ca_server.py
+# 2. Install Python dependencies (Cryptography is essential here)
+RUN pip install --no-cache-dir cryptography pyyaml
 
-# ------------------------------------------------------
-# Create GNUPG home for CA root keypair
-# ------------------------------------------------------
-RUN mkdir -p /app/gnupg_home && chmod 700 /app/gnupg_home
+# 3. Create necessary directories
+RUN mkdir -p /app/db /tls_public && \
+    chmod 755 /app/db /tls_public
 
-# ------------------------------------------------------
-# Create database directory
-# ------------------------------------------------------
-RUN mkdir -p /app/db && chmod 755 /app/db
-
-
-# ------------------------------------------------------
-# Create directory for public TLS certs (to share with clients)
-# ------------------------------------------------------
-
-# ------------------------------------------------------
-# Generate self-signed TLS certificate for the CA 
-# Copy pubic cert to shared folder
-# ------------------------------------------------------
+# 4. Generate CA Root credentials
+# This creates the "Master" identity that signs everyone else.
 RUN openssl req -x509 -newkey rsa:4096 \
     -keyout /app/ca.key \
     -out /app/ca.crt \
     -days 3650 -nodes \
-    -subj "/CN=PGP_CA" && \
+    -subj "/CN=ca" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,digitalSignature,keyCertSign,cRLSign" && \
     chmod 600 /app/ca.key /app/ca.crt && \
     cp /app/ca.crt /tls_public/ca-cert.pem && \
     chmod 444 /tls_public/ca-cert.pem
 
-# ------------------------------------------------------
-# Install Python dependencies
-# ------------------------------------------------------
-RUN pip install --no-cache-dir python-gnupg pyyaml
 
-# ------------------------------------------------------
-# Expose CA port (TLS)
-# ------------------------------------------------------
+# 5. Copy the actual CA server code
+COPY ca_server.py /app/ca_server.py
+
+# 6. Expose the CA listener port
 EXPOSE 4444
 
-# ------------------------------------------------------
-# Start CA server
-# ------------------------------------------------------
-CMD ["python", "/app/ca_server.py"]
+# 7. Define the volume for clients to mount
+# When clients start, they use: -v securedrop_tls_public:/tls_public:ro
+VOLUME /tls_public
 
+CMD ["python", "/app/ca_server.py"]

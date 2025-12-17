@@ -1,5 +1,6 @@
 # Usage
-1. Setup the PKI: `docker-compose up -d --build`
+1. Setup the PKI: `docker-compose up -d ca`
+2. Build `client_image:latest`: `docker-compose build`
 2. Start the repl: `uv run host_repl.py`
 
 # Client Architecture

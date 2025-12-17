@@ -2,21 +2,22 @@ version: "3.9"
 services: 
     ca: 
         image: ca-image:latest
+        environment:
+            - PYTHONUNBUFFERED=1 # Allow python print statements to be visible in docker logs
         container_name: ca
         build: 
             context: ./ca 
         networks: 
             - securedrop-net
         ports: 
-            - "4444:4444" # CA reachable from host 
+            - "4444:4444"
         volumes: 
-            - ./ca/tls:/tls_public
-            - ./ca/gnupg:/gnupg_home
-            - ./ca/data:/app/db
+            # Public volume shared with clients (read-write for CA)
+            - securedrop_tls_public:/tls_public
+            # Private volume for the CA database (newly updated)
+            - securedrop_ca_db:/app/db
         restart: unless-stopped 
     
-    # Template image for client containers
-    # Requires --build flag with docker-compose
     client_template: 
         build: 
             context: ./client 
@@ -25,8 +26,14 @@ services:
             - securedrop-net
 
 networks: 
-    pgpnet: 
+    securedrop-net: 
         name: securedrop-net
         driver: bridge
         attachable: true
 
+volumes:
+    securedrop_tls_public:
+        name: securedrop_tls_public
+    # Managed volume for the user registry and CA private keys
+    securedrop_ca_db:
+        name: securedrop_ca_db

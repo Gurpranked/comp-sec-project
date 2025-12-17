@@ -1,39 +1,49 @@
 FROM python:3.12-slim
 
 # ------------------------------------------------------
-# Install required tools
+# Install System Dependencies
+# Only 'openssl' is kept for potential manual debugging
 # ------------------------------------------------------
 RUN apt-get update && \
-    apt-get install -y gnupg && \
+    apt-get install -y --no-install-recommends openssl && \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------
 # Create working directory
 # ------------------------------------------------------
-RUN mkdir -p /client_core && chmod 755 /client_core
 WORKDIR /client_core
 
 # ------------------------------------------------------
+# Install Python deps
+# 'cryptography' is the heavy lifter for CSRs and mTLS
+# ------------------------------------------------------
+RUN pip install --no-cache-dir cryptography pyyaml
+
+# ------------------------------------------------------
 # Copy client code
+# Ensure all your new scripts (register.py, client_listener.py, 
+# list_contacts.py, etc.) are in the client_core folder.
 # ------------------------------------------------------
 COPY client_core /client_core/
 
 # ------------------------------------------------------
-# Make gnupg home directory
+# Prepare persistent data mount point
 # ------------------------------------------------------
-RUN mkdir -p /data/gpupg_home && chmod 700 /data/
+RUN mkdir -p /data && chmod 755 /data
 
 # ------------------------------------------------------
-# Install Python deps (if any)
+# Entrypoint Setup
 # ------------------------------------------------------
-RUN pip install --no-cache-dir python-gnupg
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # ------------------------------------------------------
-# Run registration script
+# Expose server port
+# Match this to LISTEN_PORT in client_listener.py
 # ------------------------------------------------------
-RUN python3 /client_core/register.py
+EXPOSE 5001
 
 # ------------------------------------------------------
-# The container sleeps indefinitely; all work is via docker exec
+# Runtime Setup
 # ------------------------------------------------------
-CMD ["sleep", "infinity"]
+ENTRYPOINT ["/entrypoint.sh"]
