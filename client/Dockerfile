@@ -39,7 +39,7 @@ RUN chmod +x /entrypoint.sh
 
 # ------------------------------------------------------
 # Expose server port
-# Match this to LISTEN_PORT in client_listener.py
+# Match this to LISTEN_PORT in secure_server.py
 # ------------------------------------------------------
 EXPOSE 5001
 

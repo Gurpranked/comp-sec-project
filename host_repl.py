@@ -102,10 +102,22 @@ class Session:
             print("User already exists.")
             return
 
-        password = getpass("Password: ")
-        while not is_strong_password(password):
-            print("Password too weak.")
+        while True:
             password = getpass("Password: ")
+            
+            if not is_strong_password(password):
+                print("Password too weak. Ensure it meets security requirements.")
+                print("Password must contain a number, special character, and capital + lowercase leters") 
+                continue
+                
+            confirm_password = getpass("Confirm Password: ")
+            
+            if password != confirm_password:
+                print("Passwords do not match. Please try again.")
+                continue
+            
+            # If we reach here, password is valid and confirmed
+            break
 
         container_name = f"sd_client_{email_hash[:12]}"
         # Safety Check: If container exists but user isn't in DB, wipe it
@@ -144,6 +156,7 @@ class Session:
         self.users_db[email_hash] = {
             "username": username,
             "container": container_name,
+            "password_hash": sha256(password),
             "volume": user_vol
         }
         self.save_db()
@@ -159,7 +172,14 @@ class Session:
         if email_hash not in self.users_db:
             print("User not found.")
             return
-
+        
+        password_hash = self.users_db[email_hash]["password_hash"]
+        password = getpass("Password: ")
+        if sha256(password) != password_hash:
+            print("Incorrect password")
+            return 
+         
+         
         self.user = self.users_db[email_hash]['username']
         self.email = email
         self.container = self.users_db[email_hash]["container"]
@@ -186,6 +206,8 @@ class Session:
         if not self.container: return print("Login first.")
         print("Checking contacts (Online & Reciprocity check)...")
         res = docker_exec(self.container, ["python3", "/client_core/list_contacts.py"])
+        if res.stderr:
+            print(res.stderr)
         print(res.stdout)
 
     def send_file(self):
@@ -241,9 +263,22 @@ class Session:
 
 
     def help_message(self):
-        cmds = ["register", "login", "exit"] if not self.user else \
-               ["add", "list", "send", "remove", "logout", "exit"]
-        print(f"Available commands: {', '.join(cmds)}")
-
+        if not self.user:
+            cmds = """
+   "register" -> Register a new user
+   "login"    -> Login with an existing account 
+   "exit"     -> Exit SecureDrop 
+                   """
+        else:
+            cmds = """
+   "add"      -> Add a new contact 
+   "list"     -> List all online contacts 
+   "send"     -> Send a file to contacts 
+   "logout"   -> Logout from SecureDrop
+   "exit"     -> Exit SecureDrop 
+                   """
+        print(cmds)
 if __name__ == "__main__":
+    print("Welcome to SecureDrop")
+    print("Type 'help' for commands")
     Session().run()

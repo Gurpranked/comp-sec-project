@@ -1,7 +1,7 @@
 # Usage
-1. Setup the PKI: `docker-compose up -d ca`
-2. Build `client_image:latest`: `docker-compose build`
-2. Start the repl: `uv run host_repl.py`
+1. Build the images: `docker-compose build`
+2. Setup the PKI: `docker-compose up -d ca`
+3. Start the repl: `uv run host_repl.py`
 
 # Client Architecture
 ```
@@ -70,19 +70,20 @@
     - Get other user certificates
     - Register yourself
     - Remove yourself with challenge
-# To-do
-- [ ] Add contacts
+
+- Add contacts
     - Req: `email`
     - REPL -> Container -> CA -> Container -> REPL
     - REPL requests container to lookup the email into CA
     - Obtain signed key and verify against CA public key
     - Store record into container
     - Respond to REPL
-- [ ] Functionality to check if contacts are online
+- Functionality to check if contacts are online
     - REPL -> Container -> REPL
     - REPL requests container to return all online containers
     - Container checks list and sequentially checks if each record is online
     - Container responds with list of online contacts
+# To-do
 - [ ] Send files to contacts
     - (REPL -> Container -> REPL) -> (Other container -> Other REPL)
     - REPL requests container to send a file to a contact

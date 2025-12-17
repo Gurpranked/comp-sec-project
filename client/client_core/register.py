@@ -62,7 +62,7 @@ def register():
     # 3. Create Certificate Signing Request (CSR)
     print("[INFO] Creating CSR...")
     csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, email_hash),
+        x509.NameAttribute(NameOID.COMMON_NAME, email_hash[:12]),
         x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, username),
     ])).sign(private_key, hashes.SHA256())
 
