@@ -14,7 +14,8 @@ from pathlib import Path
 BASE_DIR = Path.home() / "securedrop_clients"
 BASE_DIR.mkdir(exist_ok=True)
 
-USER_DB = BASE_DIR / "users.json"
+USERS_DIR = BASE_DIR / "users"
+USERS_DIR.mkdir(exist_ok=True)
 CLIENT_IMAGE = "client_template:latest"
 NETWORK = "securedrop-net"
 # This matches the VOLUME defined in your CA Dockerfile
@@ -56,17 +57,31 @@ class Session:
         self.container = None
         self.email = None
         ensure_network()
-        self.users_db = self.load_db()
 
-    def load_db(self):
-        return json.loads(USER_DB.read_text()) if USER_DB.exists() else {}
+    def _get_user_path(self, email_hash):
+        return USERS_DIR / f"{email_hash}.json"
+    
+    def get_user_data(self, email_hash):
+        """Fetches data for a specific user only when needed."""
+        path = self._get_user_path(email_hash)
+        if path.exists():
+            return json.loads(path.read_text())
+        return None
 
-    def save_db(self):
-        USER_DB.write_text(json.dumps(self.users_db, indent=2))
+    def save_user_data(self, email_hash, data):
+        """Saves only this specific user's data to their own file."""
+        path = self._get_user_path(email_hash)
+        path.write_text(json.dumps(data, indent=2))
 
     def prompt(self):
         return f"SecureDrop@{self.user if self.user else 'guest'}> "
 
+    def delete_user_data(self, email_hash):
+        """Deletes the specific file for this user."""
+        path = self._get_user_path(email_hash)
+        if path.exists():
+            path.unlink()
+    
     def run(self):
         while True:
             try:
@@ -98,7 +113,7 @@ class Session:
         email = input("Email: ").strip()
         email_hash = sha256(email)
 
-        if email_hash in self.users_db:
+        if self.get_user_data(email_hash):
             print("User already exists.")
             return
 
@@ -153,13 +168,13 @@ class Session:
             print(f"[ERROR] Docker failed to start: {result.stderr}")
             return
 
-        self.users_db[email_hash] = {
+        user_data = {
             "username": username,
             "container": container_name,
             "password_hash": sha256(password),
             "volume": user_vol
         }
-        self.save_db()
+        self.save_user_data(email_hash, user_data)
         
         self.user, self.email, self.container = username, email, container_name
         print("Registration and identity generation successful.")
@@ -169,20 +184,20 @@ class Session:
         email = input("Email: ").strip()
         email_hash = sha256(email)
         
-        if email_hash not in self.users_db:
+        user_data = self.get_user_data(email_hash) 
+        if not user_data:
             print("User not found.")
             return
         
-        password_hash = self.users_db[email_hash]["password_hash"]
         password = getpass("Password: ")
-        if sha256(password) != password_hash:
+        if sha256(password) != user_data["password_hash"]:
             print("Incorrect password")
             return 
          
          
-        self.user = self.users_db[email_hash]['username']
+        self.user = user_data['username']
         self.email = email
-        self.container = self.users_db[email_hash]["container"]
+        self.container = user_data["container"]
         
         subprocess.run(["docker", "start", self.container])
         print(f"Logged in as {self.user}. Client listener started.")
@@ -198,7 +213,9 @@ class Session:
     def add_contact(self):
         if not self.container: return print("Login first.")
         target = input("Contact email: ").strip()
-        
+        if target == self.email:
+            print("[ERROR] You're attempting to add yourself as a contact.")
+            return
         res = docker_exec(self.container, ["python3", "/client_core/add_contact.py", target])
         print(res.stdout if res.returncode == 0 else res.stderr)
 
@@ -226,7 +243,8 @@ class Session:
         
         email_hash = sha256(self.email)
         container_name = self.container
-        volume_name = self.users_db[email_hash]["volume"]
+        user_data = self.get_user_data(email_hash)
+        volume_name = user_data["volume"]
 
         print(f"[CLEANUP] Deleting user session for {self.user}...")
 
@@ -239,11 +257,11 @@ class Session:
  
         # 2. Force Stop and Remove Container
         # The -f flag handles running containers and -v removes associated anonymous volumes
-        subprocess.run(["docker", "rm", "-fv", container_name], capture_output=True)
+        subprocess.run(["docker", "rm", "-fv", self.container], capture_output=True)
 
         # 3. Explicitly Remove the Named Volume
         # This is critical so that a re-registration starts with a blank slate
-        subprocess.run(["docker", "volume", "rm", "-f", volume_name], capture_output=True)
+        subprocess.run(["docker", "volume", "rm", "-f", user_data["volume"]], capture_output=True)
 
         # 4. Final Check: Ensure no 'ghost' container exists
         res = subprocess.run(["docker", "ps", "-a", "-q", "-f", f"name={container_name}"], 
@@ -252,13 +270,11 @@ class Session:
             print("[ERROR] Docker failed to release the container name. Manual intervention required.")
             return
 
-        # 4. Remove from Host JSON Database
-        del self.users_db[email_hash]
-        self.save_db()
+        # 4. Remove JSON file
+        self.delete_user_data(email_hash)
         
         # 5. Clear session variables
         self.user = self.email = self.container = None
-        self.logout()
         print(f"[SUCCESS] Account {email_hash[:12]} fully purged.") 
 
 
