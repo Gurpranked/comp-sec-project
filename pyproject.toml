@@ -7,5 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "cryptography>=46.0.3",
     "pycryptodome>=3.23.0",
+    "python-gnupg>=0.5.5",
     "pyyaml>=6.0.3",
+    "requests>=2.32.5",
 ]
