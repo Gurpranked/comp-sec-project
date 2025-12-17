@@ -7,7 +7,7 @@
 ```
 +--------------------------+
 | Client Container         |
-|   - gpg home             |
+|   - Client and CA keys   |
 |   - client logic         |
 |   - TLS sockets          |
 |__________________________|
@@ -30,7 +30,7 @@
            v                                        v
 +------------------------------+       +------------------------------+
 | Client Container A           | <---> | Client Container B           |
-|  - GPG Keyring               |       |  - GPG Keyring               |
+|  - Contact Certificates      |       |  - Contact Certificates      |
 |  - TLS client/server         |       |  - TLS client/server         |
 |  - File encryption           |       |  - File encryption           |
 +------------------------------+       +------------------------------+
